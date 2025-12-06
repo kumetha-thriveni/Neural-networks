@@ -1,0 +1,147 @@
+import tensorflow as tf
+import cv2
+import numpy as np
+import matplotlib.pyplot as plt
+
+# 1. Load the MNIST training and test datasets
+(x_train, y_train), (x_test, y_test) = tf.keras.datasets.mnist.load_data()
+
+# 2. Normalize the pixel values
+x_train = x_train.astype('float32') / 255.0
+x_test = x_test.astype('float32') / 255.0
+
+# 3. Reshape x_train and x_test to include a channel dimension
+x_train = x_train[..., tf.newaxis]
+x_test = x_test[..., tf.newaxis]
+
+print("MNIST data loaded, normalized, and reshaped.")
+print(f"x_train shape: {x_train.shape}")
+print(f"y_train shape: {y_train.shape}")
+print(f"x_test shape: {x_test.shape}")
+print(f"y_test shape: {y_test.shape}")
+import numpy as np
+import tensorflow as tf
+
+# 1. Define the function to combine two MNIST digits
+def create_two_digit_image(img1, label1, img2, label2):
+    # Concatenate images horizontally. Images are (height, width, channels)
+    # We concatenate along the width dimension (axis=1)
+    combined_image = tf.concat([img1, img2], axis=1)
+    combined_labels = (label1, label2)
+    return combined_image, combined_labels
+
+# Helper function to generate synthetic dataset
+def generate_synthetic_dataset(x_data, y_data, num_samples):
+    synthetic_images = []
+    synthetic_labels = []
+    num_original_samples = x_data.shape[0]
+
+    for _ in range(num_samples):
+        # Randomly select two indices from the original dataset
+        idx1, idx2 = np.random.randint(0, num_original_samples, 2)
+
+        img1 = x_data[idx1]
+        label1 = y_data[idx1]
+        img2 = x_data[idx2]
+        label2 = y_data[idx2]
+
+        combined_image, combined_label = create_two_digit_image(img1, label1, img2, label2)
+        synthetic_images.append(combined_image)
+        synthetic_labels.append(combined_label)
+
+    # Convert lists to TensorFlow tensors
+    synthetic_images = tf.stack(synthetic_images)
+    synthetic_labels = tf.convert_to_tensor(synthetic_labels, dtype=tf.int32)
+
+    return synthetic_images, synthetic_labels
+
+# 2. Create new training and testing datasets
+print("Generating synthetic training dataset...")
+num_train_samples = 60000
+x_train_two_digit, y_train_two_digit = generate_synthetic_dataset(x_train, y_train, num_train_samples)
+
+print("Generating synthetic test dataset...")
+num_test_samples = 10000
+x_test_two_digit, y_test_two_digit = generate_synthetic_dataset(x_test, y_test, num_test_samples)
+
+print("Synthetic datasets generated.")
+print(f"x_train_two_digit shape: {x_train_two_digit.shape}")
+print(f"y_train_two_digit shape: {y_train_two_digit.shape}")
+print(f"x_test_two_digit shape: {x_test_two_digit.shape}")
+print(f"y_test_two_digit shape: {y_test_two_digit.shape}")
+from tensorflow.keras.layers import Input, Conv2D, MaxPooling2D, Flatten, Dense
+from tensorflow.keras.models import Model
+
+# 1. Define the input layer
+input_shape = (28, 56, 1)
+input_tensor = Input(shape=input_shape, name='input_image')
+
+# 2. Build the common feature extraction part of the CNN
+x = Conv2D(32, (3, 3), activation='relu', padding='same')(input_tensor)
+x = MaxPooling2D((2, 2))(x)
+x = Conv2D(64, (3, 3), activation='relu', padding='same')(x)
+x = MaxPooling2D((2, 2))(x)
+
+# 3. Flatten the output of the last pooling layer
+x = Flatten()(x)
+
+# 4. Create two separate branches for digit classification
+# Branch for the first digit
+output1 = Dense(128, activation='relu')(x)
+output1 = Dense(10, activation='softmax', name='digit1_output')(output1)
+
+# Branch for the second digit
+output2 = Dense(128, activation='relu')(x)
+output2 = Dense(10, activation='softmax', name='digit2_output')(output2)
+
+# 5. Instantiate the tf.keras.Model
+model = Model(inputs=input_tensor, outputs=[output1, output2], name='two_digit_cnn')
+
+# 6. Print the model summary
+print("CNN Model for Two-Digit Recognition:")
+model.summary()
+model.compile(
+    optimizer='adam',
+    loss={'digit1_output': 'sparse_categorical_crossentropy', 'digit2_output': 'sparse_categorical_crossentropy'},
+    metrics={'digit1_output': ['accuracy'], 'digit2_output': ['accuracy']}
+)
+print("Model compiled successfully.")
+print("Training the model...")
+history = model.fit(
+    x_train_two_digit,
+    {'digit1_output': y_train_two_digit[:, 0], 'digit2_output': y_train_two_digit[:, 1]},
+    epochs=1,
+    batch_size=32,
+    validation_data=(
+        x_test_two_digit,
+        {'digit1_output': y_test_two_digit[:, 0], 'digit2_output': y_test_two_digit[:, 1]}
+    )
+)
+# ---------- USER INPUT PART ----------
+# User gives the image path
+img_path = input("Enter the image path (example: digit.png): ")
+
+# Load the image
+img = cv2.imread(img_path, cv2.IMREAD_GRAYSCALE)
+
+# Resize to 28x56 to match the model's input shape requirement for two digits
+img = cv2.resize(img, (56, 28)) # OpenCV expects (width, height)
+
+# Normalize
+img = img / 255.0
+
+# Convert to array shape (1, 28, 56, 1) - add batch and channel dimensions
+img = np.array(img).reshape(1, 28, 56, 1)
+# Predict
+prediction = model.predict(img)
+
+# The prediction output will be a list of two arrays, one for each digit's probabilities
+predicted_digit1 = np.argmax(prediction[0])
+predicted_digit2 = np.argmax(prediction[1])
+
+print("Predicted Two-Digit Number =", f"{predicted_digit1}{predicted_digit2}")
+
+# Show the image
+plt.imshow(img.reshape(28, 56), cmap='gray')
+plt.title(f"Predicted Two-Digit Number = {predicted_digit1}{predicted_digit2}")
+plt.show()
