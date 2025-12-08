@@ -1,0 +1,76 @@
+# ensemble_tta_species.py
+import numpy as np
+import tensorflow as tf
+from tensorflow.keras.applications.resnet50 import (
+    ResNet50, preprocess_input as prep_resnet, decode_predictions
+)
+from tensorflow.keras.applications.efficientnet import (
+    EfficientNetB0, preprocess_input as prep_eff
+)
+from PIL import Image
+import cv2, os, urllib.request
+
+MODEL_INPUT = (224, 224)
+
+# Load models once
+resnet = ResNet50(weights="imagenet", input_shape=(*MODEL_INPUT, 3))
+effnet = EfficientNetB0(weights="imagenet", input_shape=(*MODEL_INPUT, 3))
+
+def download_sample_image():
+    """Download a sample tiger image if none provided."""
+    url = "https://images.pexels.com/photos/145939/pexels-photo-145939.jpeg?auto=compress&cs=tinysrgb&w=500"
+    filename = "tiger.jpg"
+    if not os.path.exists(filename):
+        print("⬇️ Downloading sample image...")
+        urllib.request.urlretrieve(url, filename)
+        print(f"✅ Downloaded {filename}")
+    return filename
+
+def load_image(path):
+    """Load image as RGB PIL Image."""
+    return Image.open(path).convert("RGB")
+
+def get_tta_crops(img, size=(224,224)):
+    """Generate 5 crops (center + corners) and their flips."""
+    w, h = img.size
+    tw, th = size
+    if w < tw or h < th:
+        img = img.resize((max(w,tw), max(h,th)))
+        w, h = img.size
+    cx, cy = (w-tw)//2, (h-th)//2
+    crops = [img.crop((cx,cy,cx+tw,cy+th))]
+    for (x,y) in [(0,0),(w-tw,0),(0,h-th),(w-tw,h-th)]:
+        crops.append(img.crop((x,y,x+tw,y+th)))
+    flips = [c.transpose(Image.FLIP_LEFT_RIGHT) for c in crops]
+    return crops + flips
+
+def preprocess(img, model_type):
+    """Preprocess image for a given model."""
+    arr = np.array(img).astype("float32")
+    arr = cv2.resize(arr, MODEL_INPUT)
+    arr = prep_resnet(arr) if model_type == "resnet" else prep_eff(arr)
+    return np.expand_dims(arr, 0)
+
+def predict_ensemble_tta(img_path, topk=5):
+    """Predict top-k labels using ResNet + EfficientNet + TTA."""
+    img = load_image(img_path)
+    crops = get_tta_crops(img)
+    preds_r, preds_e = [], []
+    for c in crops:
+        preds_r.append(resnet.predict(preprocess(c, "resnet"), verbose=0)[0])
+        preds_e.append(effnet.predict(preprocess(c, "effnet"), verbose=0)[0])
+    avg_pred = (np.mean(preds_r, 0) + np.mean(preds_e, 0)) / 2.0
+    decoded = decode_predictions(np.expand_dims(avg_pred, 0), top=topk)[0]
+    return decoded
+
+if __name__ == "__main__":
+    img_path = input("Enter image path (press Enter for sample): ").strip()
+    if not img_path:
+        img_path = download_sample_image()
+
+    print(f"\n🔍 Running Ensemble (ResNet50 + EfficientNetB0) on: {img_path}")
+    results = predict_ensemble_tta(img_path, topk=5)
+
+    print("\nTop Predictions (Ensemble + TTA):")
+    for (_, label, score) in results:
+        print(f"{label:20s} {score:.4f}")
