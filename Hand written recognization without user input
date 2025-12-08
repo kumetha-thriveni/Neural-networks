@@ -1,0 +1,56 @@
+import tensorflow as tf
+import numpy as np
+
+# 1. LOAD MNIST DATASET
+from tensorflow.keras.datasets import mnist
+
+(x_train, y_train), (x_test, y_test) = mnist.load_data()
+
+print("Training data shape:", x_train.shape)  # (60000, 28, 28)
+print("Test data shape:", x_test.shape)      # (10000, 28, 28)
+
+# 2. NORMALIZE PIXELS (0–255 → 0–1)
+x_train = x_train.astype("float32") / 255.0
+x_test  = x_test.astype("float32") / 255.0
+
+# 3. BUILD THE MODEL (28x28 → 128 → 10)
+model = tf.keras.Sequential([
+    tf.keras.layers.Input(shape=(28, 28)),   # each image is 28x28
+    tf.keras.layers.Flatten(),               # (28,28) → (784,)
+    tf.keras.layers.Dense(128, activation='relu'),
+    tf.keras.layers.Dense(10, activation='softmax')  # 10 output classes (0–9)
+])
+
+# 4. COMPILE THE MODEL
+model.compile(
+    optimizer='adam',
+    loss='sparse_categorical_crossentropy',  # labels are integers 0–9
+    metrics=['accuracy']
+)
+
+# 5. TRAIN THE MODEL
+history = model.fit(
+    x_train, y_train,
+    epochs=5,           # increase to 10 for better accuracy
+    batch_size=64,
+    validation_split=0.1,   # 10% of training used for validation
+    verbose=1
+)
+
+# 6. EVALUATE ON TEST DATA
+test_loss, test_acc = model.evaluate(x_test, y_test, verbose=0)
+print(f"\nTest accuracy: {test_acc:.4f}")
+print(f"Test loss: {test_loss:.4f}")
+
+# 7. PREDICT ON SOME TEST IMAGES
+sample_images = x_test[:5]
+sample_labels = y_test[:5]
+
+pred_probs = model.predict(sample_images)           # probabilities for 10 classes
+pred_classes = np.argmax(pred_probs, axis=1)        # pick highest probability digit
+
+print("\nTrue labels:     ", sample_labels)
+print("Predicted labels:", pred_classes)
+
+# 8. OPTIONAL: SHOW ONE IMAGE (works in Jupyter / Colab)
+
