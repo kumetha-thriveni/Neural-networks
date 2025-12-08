@@ -1,0 +1,42 @@
+import torch, torchvision, cv2, numpy as np
+from torchvision import transforms
+from PIL import Image
+from google.colab.patches import cv2_imshow # Import cv2_imshow
+
+# Load model + labels
+try:
+    from torchvision.models.detection import fasterrcnn_resnet50_fpn, FasterRCNN_ResNet50_FPN_Weights
+    w = FasterRCNN_ResNet50_FPN_Weights.DEFAULT
+    model = fasterrcnn_resnet50_fpn(weights=w)
+    CATS = w.meta["categories"]
+except:
+    model = torchvision.models.detection.fasterrcnn_resnet50_fpn(pretrained=True)
+    CATS = [str(i) for i in range(91)]
+
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+model.to(device).eval()
+
+def detect(img_path, thresh=0.6):
+    img = Image.open(img_path).convert("RGB")
+    tensor = transforms.ToTensor()(img).to(device)
+
+    with torch.no_grad():
+        out = model([tensor])[0]
+
+    img_cv = cv2.cvtColor(np.array(img), cv2.COLOR_RGB2BGR)
+    for box, label, score in zip(out['boxes'], out['labels'], out['scores']):
+        if score < thresh: continue
+        x1, y1, x2, y2 = box.int().tolist()
+        name = CATS[label] if label < len(CATS) else str(label)
+        cv2.rectangle(img_cv, (x1, y1), (x2, y2), (0,255,0), 2)
+        cv2.putText(img_cv, f"{name} {score:.2f}", (x1, y1-5),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0,255,0), 2)
+        print(f"Detected {name} ({label}) [{score:.2f}] at {x1,y1,x2,y2}")
+
+    cv2_imshow(img_cv) # Use cv2_imshow
+    cv2.imwrite("output.jpg", img_cv)
+    # cv2.waitKey(0); cv2.destroyAllWindows() # Remove these lines
+
+if __name__ == "__main__":
+    path = input("Enter image path: ").strip()
+    detect(path)
