@@ -1,42 +1,91 @@
+# -----------------------------------------------------------
+# OBJECT DETECTION using Faster R-CNN (TorchVision)
+# -----------------------------------------------------------
+
+# Import libraries
 import torch, torchvision, cv2, numpy as np
 from torchvision import transforms
 from PIL import Image
-from google.colab.patches import cv2_imshow # Import cv2_imshow
+from google.colab.patches import cv2_imshow  # Used to display images in Google Colab
 
-# Load model + labels
+# -----------------------------------------------------------
+# Load pre-trained Faster R-CNN model and COCO class labels
+# -----------------------------------------------------------
 try:
+    # Try using the newer TorchVision API (has weights + metadata)
     from torchvision.models.detection import fasterrcnn_resnet50_fpn, FasterRCNN_ResNet50_FPN_Weights
-    w = FasterRCNN_ResNet50_FPN_Weights.DEFAULT
-    model = fasterrcnn_resnet50_fpn(weights=w)
-    CATS = w.meta["categories"]
+    w = FasterRCNN_ResNet50_FPN_Weights.DEFAULT           # Use default pre-trained weights
+    model = fasterrcnn_resnet50_fpn(weights=w)            # Load model with weights
+    CATS = w.meta["categories"]                           # Get class labels (COCO dataset categories)
 except:
+    # Fallback for older TorchVision versions
     model = torchvision.models.detection.fasterrcnn_resnet50_fpn(pretrained=True)
-    CATS = [str(i) for i in range(91)]
+    CATS = [str(i) for i in range(91)]                    # Dummy category names if metadata missing
 
+# -----------------------------------------------------------
+# Select device (GPU if available, otherwise CPU)
+# -----------------------------------------------------------
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-model.to(device).eval()
+model.to(device).eval()                                   # Move model to device and set to evaluation mode
 
+# -----------------------------------------------------------
+# Function to perform object detection on a single image
+# -----------------------------------------------------------
 def detect(img_path, thresh=0.6):
+    """
+    Detect objects in an image using Faster R-CNN.
+
+    Args:
+        img_path (str): Path to the input image
+        thresh (float): Confidence threshold for showing detections
+    """
+    # Load image using PIL and convert to RGB
     img = Image.open(img_path).convert("RGB")
+
+    # Convert image to Torch tensor and move to device
     tensor = transforms.ToTensor()(img).to(device)
 
+    # Perform inference without computing gradients (saves memory)
     with torch.no_grad():
-        out = model([tensor])[0]
+        out = model([tensor])[0]  # Model outputs detections as dictionary
 
+    # Convert image to OpenCV format (BGR) for drawing
     img_cv = cv2.cvtColor(np.array(img), cv2.COLOR_RGB2BGR)
+
+    # Loop over each detected object
     for box, label, score in zip(out['boxes'], out['labels'], out['scores']):
-        if score < thresh: continue
+        if score < thresh:
+            continue  # Skip low-confidence detections
+
+        # Extract bounding box coordinates
         x1, y1, x2, y2 = box.int().tolist()
+
+        # Get class name
         name = CATS[label] if label < len(CATS) else str(label)
+
+        # Draw bounding box (green)
         cv2.rectangle(img_cv, (x1, y1), (x2, y2), (0,255,0), 2)
+
+        # Put class name and confidence on the image
         cv2.putText(img_cv, f"{name} {score:.2f}", (x1, y1-5),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0,255,0), 2)
+
+        # Print detection details in console
         print(f"Detected {name} ({label}) [{score:.2f}] at {x1,y1,x2,y2}")
 
-    cv2_imshow(img_cv) # Use cv2_imshow
-    cv2.imwrite("output.jpg", img_cv)
-    # cv2.waitKey(0); cv2.destroyAllWindows() # Remove these lines
+    # Display the output image in Colab (use cv2_imshow instead of cv2.imshow)
+    cv2_imshow(img_cv)
 
+    # Save output image with detections
+    cv2.imwrite("output.jpg", img_cv)
+    print("\n✅ Output saved as 'output.jpg'")
+
+# -----------------------------------------------------------
+# Main entry point
+# -----------------------------------------------------------
 if __name__ == "__main__":
+    # Ask user for image path
     path = input("Enter image path: ").strip()
+
+    # Run detection on given image
     detect(path)
