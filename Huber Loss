@@ -1,0 +1,44 @@
+import numpy as np
+
+# ---------- 1. Input data ----------
+x = np.array([1.0, 2.0])      # 2 inputs
+y = 3.0                       # target value (REGRESSION)
+
+# ---------- 2. Initialize weights ----------
+W1 = np.array([[0.2, -0.1],
+               [0.4,  0.3]])   # input → hidden (2x2)
+b1 = np.array([0.1, -0.2])     # hidden bias
+
+W2 = np.array([[0.5],
+               [-0.4]])        # hidden → output (2x1)
+b2 = np.array([0.2])           # output bias
+
+# ---------- Activation ----------
+def relu(z):
+    return np.maximum(0, z)
+
+# ---------- Huber Loss ----------
+def huber_loss(y_true, y_pred, delta=1.0):
+    error = y_true - y_pred
+    if abs(error) <= delta:
+        return 0.5 * error**2
+    else:
+        return delta * (abs(error) - 0.5 * delta)
+
+# ---------- 3. Forward pass ----------
+# Hidden layer
+z1 = np.dot(x, W1) + b1
+a1 = relu(z1)
+
+# Output layer (LINEAR for Huber loss)
+y_hat = np.dot(a1, W2) + b2
+
+# ---------- Loss ----------
+loss = huber_loss(y, y_hat)
+
+# ---------- Print results ----------
+print("Input:", x)
+print("Hidden pre-activation:", z1)
+print("Hidden output:", a1)
+print("Predicted output:", y_hat)
+print("Huber Loss:", loss)
